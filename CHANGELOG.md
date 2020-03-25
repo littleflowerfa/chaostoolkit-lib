@@ -4,6 +4,16 @@
 
 [Unreleased]: https://github.com/chaostoolkit/chaostoolkit-lib/compare/1.8.1...HEAD
 
+### Added
+
+- Refactored run of the experiment so that we can have multiple run strategies
+  suchas not running the steady-state hypothesis before or after the method
+  but also one strategy so that the steady-state is continously applied
+  during the method, with the option to bail the experiment as soon as it
+  deviates. [#149][149]
+
+[149]: https://github.com/chaostoolkit/chaostoolkit/issues/149
+
 ### Changed
 
 - Fix error on empty string variables call [#165][165]

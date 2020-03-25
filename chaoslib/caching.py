@@ -7,7 +7,7 @@ from typing import List, Union
 
 from logzero import logger
 
-from chaoslib.types import Activity, Experiment, Settings
+from chaoslib.types import Activity, Experiment, Settings, Schedule, Strategy
 
 
 __all__ = ["cache_activities", "clear_cache", "lookup_activity", "with_cache"]
@@ -49,7 +49,10 @@ def with_cache(f):
     function.
     """
     @wraps(f)
-    def wrapped(experiment: Experiment, settings: Settings = None):
+    def wrapped(experiment: Experiment, settings: Settings = None,
+                strategy: Strategy = Strategy.DEFAULT,
+                schedule: Schedule = None,
+                event_handlers: List['RunEventHandler'] = None):
         try:
             if experiment:
                 cache_activities(experiment)
@@ -60,6 +63,12 @@ def with_cache(f):
             }
             if "settings" in sig.parameters:
                 arguments["settings"] = settings
+            if "strategy" in sig.parameters:
+                arguments["strategy"] = strategy
+            if "schedule" in sig.parameters:
+                arguments["schedule"] = schedule
+            if "event_handlers" in sig.parameters:
+                arguments["event_handlers"] = event_handlers
             return f(**arguments)
         finally:
             clear_cache()
