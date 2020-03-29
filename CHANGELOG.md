@@ -12,6 +12,12 @@
   during the method, with the option to bail the experiment as soon as it
   deviates. [#149][149]
 
+### Changed
+
+- Potentially breaking. The following functions have moved from
+  `chaoslib.experiment` to `chaoslib.run`: `initialize_run_journal`,
+  `apply_activities`, `apply_rollbacks`.
+
 [149]: https://github.com/chaostoolkit/chaostoolkit/issues/149
 
 ### Changed

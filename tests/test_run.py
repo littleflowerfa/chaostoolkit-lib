@@ -1,13 +1,12 @@
 # -*- coding: utf-8 -*-
 from typing import NoReturn
 
-from chaoslib.exceptions import ActivityFailed, InvalidActivity, \
-    InvalidExperiment, InterruptExecution
 from chaoslib.experiment import run_experiment
-from chaoslib.run import RunEventHandler, Schedule, Strategy
+from chaoslib.run import EventHandlerRegistry, RunEventHandler, Schedule, \
+    Strategy
 from chaoslib.types import Experiment, Journal
 
-from fixtures import experiments
+from fixtures import experiments, run_handlers
 
 
 def test_run_ssh_before_method_only():
@@ -165,3 +164,53 @@ def test_exit_immediatly_when_continous_ssh_fails_and_failfast_when_background_a
     assert journal["status"] == "failed"
     assert journal["deviated"] == True
     assert len(journal["run"]) == 2
+
+
+
+def test_run_handler_is_called_on_each_handler():
+    registry = EventHandlerRegistry()
+    h = run_handlers.FullRunEventHandler()
+    registry.register(h)
+
+    registry.started(None, None)
+    registry.finish(None)
+    registry.interrupted(None, None)
+    registry.signal_exit()
+    registry.start_continous_hypothesis(0)
+    registry.continous_hypothesis_iteration(0, None)
+    registry.continous_hypothesis_completed()
+    registry.condition_completed(None, 0)
+    registry.start_cooldown(0)
+    registry.cooldown_completed()
+
+    assert h.calls == [
+        "started", "finish", "interrupted", "signal_exit",
+        "start_continous_hypothesis", "continous_hypothesis_iteration",
+        "continous_hypothesis_completed", "condition_completed",
+        "start_cooldown", "cooldown_completed"
+    ]
+
+
+def test_exceptions_does_not_stop_handler_registry():
+    registry = EventHandlerRegistry()
+    registry.register(run_handlers.FullExceptionRunEventHandler())
+    h = run_handlers.FullRunEventHandler()
+    registry.register(h)
+
+    registry.started(None, None)
+    registry.finish(None)
+    registry.interrupted(None, None)
+    registry.signal_exit()
+    registry.start_continous_hypothesis(0)
+    registry.continous_hypothesis_iteration(0, None)
+    registry.continous_hypothesis_completed()
+    registry.condition_completed(None, 0)
+    registry.start_cooldown(0)
+    registry.cooldown_completed()
+
+    assert h.calls == [
+        "started", "finish", "interrupted", "signal_exit",
+        "start_continous_hypothesis", "continous_hypothesis_iteration",
+        "continous_hypothesis_completed", "condition_completed",
+        "start_cooldown", "cooldown_completed"
+    ]

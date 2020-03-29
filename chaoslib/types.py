@@ -67,6 +67,7 @@ class Strategy(enum.Enum):
 
 class Schedule:
     def __init__(self, continous_hypothesis_frequency: float = 1.0,
-                 fail_fast: bool = False):
+                 fail_fast: bool = False, fail_fast_ratio: float = 0):
         self.continous_hypothesis_frequency = continous_hypothesis_frequency
         self.fail_fast = fail_fast
+        self.fail_fast_ratio = fail_fast_ratio

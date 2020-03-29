@@ -12,8 +12,7 @@ from chaoslib import __version__
 from chaoslib.activity import run_activities
 from chaoslib.control import initialize_controls, controls, cleanup_controls, \
     Control, initialize_global_controls, cleanup_global_controls
-from chaoslib.exceptions import ActivityFailed, ChaosException, \
-    InterruptExecution
+from chaoslib.exceptions import ChaosException, InterruptExecution
 from chaoslib.configuration import load_configuration
 from chaoslib.hypothesis import run_steady_state_hypothesis
 from chaoslib.rollback import run_rollbacks
@@ -26,6 +25,12 @@ __all__ = ["Runner", "RunEventHandler"]
 
 
 class RunEventHandler:
+    """
+    Base class to react to certain, or all, events during an execution.
+
+    This is mainly meant for reacting the execution's mainloop. Do not
+    implement it as part of an extension, use the Control interface instead.
+    """
     def started(self, experiment: Experiment, journal: Journal) -> NoReturn:
         pass
 
@@ -81,7 +86,12 @@ class EventHandlerRegistry:
 
     def finish(self, journal: Journal) -> NoReturn:
         for h in self.handlers:
-            h.finish(journal)
+            try:
+                h.finish(journal)
+            except Exception:
+                logger.debug(
+                    "Handler {} failed".format(
+                        h.__class__.__name__), exc_info=True)
 
     def interrupted(self, experiment: Experiment,
                     journal: Journal) -> NoReturn:
@@ -95,37 +105,77 @@ class EventHandlerRegistry:
 
     def signal_exit(self) -> NoReturn:
         for h in self.handlers:
-            h.signal_exit()
+            try:
+                h.signal_exit()
+            except Exception:
+                logger.debug(
+                    "Handler {} failed".format(
+                        h.__class__.__name__), exc_info=True)
 
     def start_continous_hypothesis(self, frequency: int) -> NoReturn:
         for h in self.handlers:
-            h.start_continous_hypothesis(frequency)
+            try:
+                h.start_continous_hypothesis(frequency)
+            except Exception:
+                logger.debug(
+                    "Handler {} failed".format(
+                        h.__class__.__name__), exc_info=True)
 
     def continous_hypothesis_iteration(self, iteration_index: int,
                                        state: Any) -> NoReturn:
         for h in self.handlers:
-            h.continous_hypothesis_iteration(iteration_index, state)
+            try:
+                h.continous_hypothesis_iteration(iteration_index, state)
+            except Exception:
+                logger.debug(
+                    "Handler {} failed".format(
+                        h.__class__.__name__), exc_info=True)
 
     def continous_hypothesis_completed(self) -> NoReturn:
         for h in self.handlers:
-            h.continous_hypothesis_completed()
+            try:
+                h.continous_hypothesis_completed()
+            except Exception:
+                logger.debug(
+                    "Handler {} failed".format(
+                        h.__class__.__name__), exc_info=True)
 
     def start_method(self, iteration_index: int = 0) -> NoReturn:
         for h in self.handlers:
-            h.start_method(iteration_index)
+            try:
+                h.start_method(iteration_index)
+            except Exception:
+                logger.debug(
+                    "Handler {} failed".format(
+                        h.__class__.__name__), exc_info=True)
 
     def condition_completed(self, state: Any,
                             iteration_index: int = 0) -> NoReturn:
         for h in self.handlers:
-            h.condition_completed(state, iteration_index)
+            try:
+                h.condition_completed(state, iteration_index)
+            except Exception:
+                logger.debug(
+                    "Handler {} failed".format(
+                        h.__class__.__name__), exc_info=True)
 
     def start_cooldown(self, duration: int) -> NoReturn:
         for h in self.handlers:
-            h.start_cooldown(duration)
+            try:
+                h.start_cooldown(duration)
+            except Exception:
+                logger.debug(
+                    "Handler {} failed".format(
+                        h.__class__.__name__), exc_info=True)
 
     def cooldown_completed(self) -> NoReturn:
         for h in self.handlers:
-            h.cooldown_completed()
+            try:
+                h.cooldown_completed()
+            except Exception:
+                logger.debug(
+                    "Handler {} failed".format(
+                        h.__class__.__name__), exc_info=True)
 
 
 class Runner:
@@ -282,6 +332,10 @@ def should_run_during_method(strategy: Strategy) -> bool:
 def run_gate_hypothesis(experiment: Experiment, journal: Journal,
                         configuration: Configuration, secrets: Secrets,
                         dry: bool = False) -> Dict[str, Any]:
+    """
+    Run the hypothesis before the method and bail the execution if it did
+    not pass.
+    """
     logger.debug("Running steady-state hypothesis before the method")
     state = run_steady_state_hypothesis(
         experiment, configuration, secrets, dry=dry)
@@ -303,6 +357,10 @@ def run_deviation_validation_hypothesis(experiment: Experiment,
                                         configuration: Configuration,
                                         secrets: Secrets, dry: bool = False) \
                                             -> Dict[str, Any]:
+    """
+    Run the hypothesis after the method and report to the journal if the
+    experiment has deviated.
+    """
     logger.debug("Running steady-state hypothesis after the method")
     state = run_steady_state_hypothesis(
         experiment, configuration, secrets, dry=dry)
@@ -328,6 +386,10 @@ def run_hypothesis_during_method(hypo_pool: ThreadPoolExecutor,
                                  secrets: Secrets,
                                  event_registry: EventHandlerRegistry,
                                  dry: bool = False) -> Future:
+    """
+    Run the hypothesis continously in a background thead and report the
+    status in the journal when it raised an exception.
+    """
     def completed(f: Future):
         exc = f.exception()
         event_registry.continous_hypothesis_completed()
@@ -441,11 +503,15 @@ def run_hypothesis_continuously(event: threading.Event, schedule: Schedule,
                                 event_registry: EventHandlerRegistry,
                                 dry: bool = False):
     frequency = schedule.continous_hypothesis_frequency
+    fail_fast_ratio = schedule.fail_fast_ratio
+
     event_registry.start_continous_hypothesis(frequency)
     logger.debug(
         "Executing the steady-state hypothesis continously "
         "every {} seconds".format(frequency))
 
+    failed_iteration = 0
+    failed_ratio = 0
     iteration = 1
     while not event.is_set():
         # already marked as terminated, let's exit now
@@ -458,15 +524,23 @@ def run_hypothesis_continuously(event: threading.Event, schedule: Schedule,
         event_registry.continous_hypothesis_iteration(iteration, state)
 
         if state is not None and not state["steady_state_met"]:
+            failed_iteration += 1
+            failed_ratio = (failed_iteration * 100) / iteration
             p = state["probes"][-1]
             logger.warning(
                 "Continous steady state probe '{p}' is not in the given "
                 "tolerance".format(p=p["activity"]["name"]))
 
             if schedule.fail_fast:
-                logger.info("Terminating immediatly the experiment")
-                journal["status"] = "failed"
-                break
+                if failed_ratio >= fail_fast_ratio:
+                    m = "Terminating immediatly the experiment"
+                    if failed_ratio != 0.0:
+                        m = "{} after {:.1f}% hypothesis deviated".format(
+                            m, failed_ratio
+                        )
+                    logger.info(m)
+                    journal["status"] = "failed"
+                    break
 
         # we do not adjust the frequency based on the time taken by probes
         # above. We really want frequency seconds between two iteration

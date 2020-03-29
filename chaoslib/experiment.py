@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+from concurrent.futures import ThreadPoolExecutor
 from typing import List
 
 from logzero import logger
@@ -6,15 +7,19 @@ from logzero import logger
 from chaoslib.activity import ensure_activity_is_valid
 from chaoslib.caching import with_cache, lookup_activity
 from chaoslib.control import validate_controls
-from chaoslib.deprecation import warn_about_deprecated_features
+from chaoslib.deprecation import warn_about_deprecated_features, \
+    warn_about_moved_function
 from chaoslib.exceptions import InvalidActivity, InvalidExperiment
 from chaoslib.extension import validate_extensions
 from chaoslib.configuration import load_configuration
 from chaoslib.hypothesis import ensure_hypothesis_is_valid
 from chaoslib.loader import load_experiment
-from chaoslib.run import Runner, RunEventHandler
+from chaoslib.run import Runner, RunEventHandler, \
+    initialize_run_journal as init_journal, apply_activities as apply_act, \
+    apply_rollbacks as apply_roll
 from chaoslib.secret import load_secrets
-from chaoslib.types import Experiment, Journal, Settings, Schedule, Strategy
+from chaoslib.types import Configuration, Experiment, Journal, Run, \
+    Schedule, Secrets, Settings, Strategy
 
 __all__ = ["ensure_experiment_is_valid", "load_experiment"]
 
@@ -121,3 +126,30 @@ def run_experiment(experiment: Experiment, settings: Settings = None,
             for h in event_handlers:
                 runner.register_event_handler(h)
         return runner.run(experiment, settings)
+
+
+def initialize_run_journal(experiment: Experiment) -> Journal:
+    warn_about_moved_function(
+        "The 'initialize_run_journal' function has now moved to the "
+        "'choaslib.run' package")
+    return init_journal(experiment)
+
+
+def apply_activities(experiment: Experiment, configuration: Configuration,
+                     secrets: Secrets, pool: ThreadPoolExecutor,
+                     journal: Journal, dry: bool = False) -> List[Run]:
+    warn_about_moved_function(
+        "The 'apply_activities' function has now moved to the "
+        "'choaslib.run' package")
+    return apply_act(
+        experiment, configuration, secrets, pool, journal, dry)
+
+
+def apply_rollbacks(experiment: Experiment, configuration: Configuration,
+                    secrets: Secrets, pool: ThreadPoolExecutor,
+                    dry: bool = False) -> List[Run]:
+    warn_about_moved_function(
+        "The 'apply_rollbacks' function has now moved to the "
+        "'choaslib.run' package")
+    return apply_roll(
+        experiment, configuration, secrets, pool, dry)
